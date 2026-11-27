@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Giornate di pioggia</title>
+<style>
+  :root { --bg:#f2f3f7; --card:#fff; --line:#e3e5ec; --text:#1b1c22; --muted:#6b6f80; --off:#eef0f5; --rain:#1c7ed6; --brand:#5b4bff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0c0d12; --card:#16171e; --line:#262833; --text:#eceef5; --muted:#9a9eb0; --off:#1d1f28; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 24px; margin: 4px 0 12px; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; }
+  .bar button { border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:10px; padding:6px 12px; font-size:15px; cursor:pointer; }
+  .bar .title { font-weight:600; font-size:17px; min-width:150px; text-align:center; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background: var(--rain); color:#fff; }
+  .card { background:var(--card); border-radius:14px; overflow:auto; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  table { border-collapse: collapse; width:100%; }
+  th, td { border-bottom:1px solid var(--line); text-align:center; padding:0; height:42px; min-width:34px; }
+  th { font-weight:500; font-size:12px; color:var(--muted); }
+  th b { display:block; color:var(--text); font-size:14px; }
+  th.today b { background:var(--brand); color:#fff; border-radius:8px; display:inline-block; padding:0 6px; }
+  .name { text-align:left; padding:0 12px; font-weight:600; position:sticky; left:0; background:var(--card); white-space:nowrap; min-width:110px; }
+  .tot { position:sticky; right:0; background:var(--card); border-left:1px solid var(--line); min-width:70px; font-weight:700; font-size:13px; }
+  .tot small { display:block; font-weight:400; color:var(--muted); }
+  .off { background: var(--off); }
+  .h { display:block; margin:3px; border-radius:6px; padding:8px 0; font-weight:700; font-size:12px; }
+  .foot td { color: var(--rain); font-weight:700; border-bottom:0; }
+  .msg { padding: 40px 16px; text-align:center; color: var(--muted); }
+  .note { color: var(--muted); font-size:12px; margin-top:10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>☔ Giornate di pioggia</h1>
+  <div class="bar">
+    <span class="seg"><button id="vm" class="on">Mese</button><button id="vw">Settimana</button></span>
+    <button id="prev" aria-label="Prima">‹</button>
+    <span class="title" id="title"></span>
+    <button id="next" aria-label="Dopo">›</button>
+    <button id="today">Oggi</button>
+  </div>
+  <div class="card" id="out"><div class="msg">Carico…</div></div>
+  <p class="note">Ore di pioggia per dipendente (8 h = giornata intera). Sola lettura, si aggiorna da sola.</p>
+</main>
+<script>
+const URL_ = "https://fctqqvetkrgjvjbzhtkm.supabase.co", KEY = "sb_publishable_CA0rvv2NI20SCQJh_3J1GQ_NGwrgZbT";
+const token = new URLSearchParams(location.search).get("t") || "";
+const MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+const MS = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
+const WL = ["L","M","M","G","V","S","D"], WS = ["lun","mar","mer","gio","ven","sab","dom"];
+let anchor = new Date(); anchor.setHours(0,0,0,0);
+let week = false;
+const key = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const fmt = h => (Math.round(h*10)/10).toString().replace(".", ",");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function holiday(d) {
+  const f = ["1-1","1-6","4-25","5-1","6-2","8-15","11-1","12-8","12-25","12-26"];
+  if (f.includes(`${d.getMonth()+1}-${d.getDate()}`)) return true;
+  const y=d.getFullYear(),a=y%19,b=Math.floor(y/100),c=y%100,dd=Math.floor(b/4),e=b%4,ff=Math.floor((b+8)/25),g=Math.floor((b-ff+1)/3),h=(19*a+b-dd-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+  const mo=Math.floor((h+l-7*m+114)/31), da=((h+l-7*m+114)%31)+1;
+  const em = new Date(y, mo-1, da+1);
+  return key(em) === key(d);
+}
+function days() {
+  const out = [];
+  if (week) {
+    const s = new Date(anchor); s.setDate(s.getDate() - ((s.getDay()+6)%7));
+    for (let i=0;i<7;i++){ const d=new Date(s); d.setDate(s.getDate()+i); out.push(d); }
+  } else {
+    const n = new Date(anchor.getFullYear(), anchor.getMonth()+1, 0).getDate();
+    for (let i=1;i<=n;i++) out.push(new Date(anchor.getFullYear(), anchor.getMonth(), i));
+  }
+  return out;
+}
+async function load() {
+  const ds = days();
+  const t = document.getElementById("title");
+  t.textContent = week
+    ? `${ds[0].getDate()} ${MS[ds[0].getMonth()]} – ${ds[6].getDate()} ${MS[ds[6].getMonth()]} ${ds[6].getFullYear()}`
+    : `${MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
+  const out = document.getElementById("out");
+  if (token.length < 40) { out.innerHTML = '<div class="msg">Link non valido.</div>'; return; }
+  let data;
+  try {
+    const r = await fetch(`${URL_}/rest/v1/rpc/rain_public`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: KEY },
+      body: JSON.stringify({ p_token: token, p_from: key(ds[0]), p_to: key(ds[ds.length-1]) }),
+    });
+    data = await r.json();
+  } catch (e) { out.innerHTML = '<div class="msg">Senza rete: riprova tra poco.</div>'; return; }
+  if (!data || !data.workers) { out.innerHTML = '<div class="msg">Questo link non è più attivo.</div>'; return; }
+  const hours = {};
+  for (const d of data.days) hours[`${d.worker_id}|${d.day}`] = Number(d.hours);
+  const today = key(new Date());
+  let html = "<table><thead><tr><th class='name'>Dipendente</th>";
+  for (const d of ds) {
+    const off = d.getDay()===0 || d.getDay()===6 || holiday(d);
+    html += `<th class="${off?"off":""} ${key(d)===today?"today":""}">${week?WS[(d.getDay()+6)%7]:WL[(d.getDay()+6)%7]}<b>${d.getDate()}</b></th>`;
+  }
+  html += "<th class='tot'>Totale</th></tr></thead><tbody>";
+  let grand = 0;
+  for (const w of data.workers) {
+    let tot = 0;
+    html += `<tr><td class="name">${esc(w.name)}</td>`;
+    for (const d of ds) {
+      const off = d.getDay()===0 || d.getDay()===6 || holiday(d);
+      const h = hours[`${w.id}|${key(d)}`];
+      if (h) {
+        tot += h;
+        const a = Math.max(0.25, Math.min(1, h/8));
+        html += `<td class="${off?"off":""}"><span class="h" style="background:rgba(28,126,214,${a});color:${a>=.5?"#fff":"var(--rain)"}">${week?"☔ ":""}${fmt(h)}${week?" h":""}</span></td>`;
+      } else html += `<td class="${off?"off":""}"></td>`;
+    }
+    grand += tot;
+    html += `<td class="tot">${tot?`${fmt(tot)} h<small>${fmt(tot/8)} gg</small>`:"–"}</td></tr>`;
+  }
+  html += "<tr class='foot'><td class='name' style='color:var(--muted);font-weight:500'>A casa</td>";
+  for (const d of ds) {
+    const n = data.workers.filter(w => hours[`${w.id}|${key(d)}`]).length;
+    html += `<td>${n||""}</td>`;
+  }
+  html += `<td class="tot">${grand?`${fmt(grand)} h<small>${fmt(grand/8)} gg</small>`:"–"}</td></tr></tbody></table>`;
+  if (!data.workers.length) html = '<div class="msg">Nessun dipendente.</div>';
+  out.innerHTML = html;
+}
+document.getElementById("prev").onclick = () => { week ? anchor.setDate(anchor.getDate()-7) : anchor = new Date(anchor.getFullYear(), anchor.getMonth()-1, 1); load(); };
+document.getElementById("next").onclick = () => { week ? anchor.setDate(anchor.getDate()+7) : anchor = new Date(anchor.getFullYear(), anchor.getMonth()+1, 1); load(); };
+document.getElementById("today").onclick = () => { anchor = new Date(); anchor.setHours(0,0,0,0); load(); };
+const vm = document.getElementById("vm"), vw = document.getElementById("vw");
+vm.onclick = () => { week=false; vm.className="on"; vw.className=""; load(); };
+vw.onclick = () => { week=true; vw.className="on"; vm.className=""; load(); };
+if (window.innerWidth < 600) vw.click(); else load();
+setInterval(load, 5*60*1000);
+</script>
+</body>
+</html>

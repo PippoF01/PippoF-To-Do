@@ -1,0 +1,6 @@
+{
+  "version": "0.19.1",
+  "build": 37,
+  "apk": "LeMieAttivita-0.19.1.apk",
+  "notes": "Corretto un errore spostando le attività tra le sezioni."
+}
